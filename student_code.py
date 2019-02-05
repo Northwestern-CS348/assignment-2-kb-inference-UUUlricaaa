@@ -22,10 +22,8 @@ class KnowledgeBase(object):
     def _get_fact(self, fact):
         """INTERNAL USE ONLY
         Get the fact in the KB that is the same as the fact argument
-
         Args:
             fact (Fact): Fact we're searching for
-
         Returns:
             Fact: matching fact
         """
@@ -36,10 +34,8 @@ class KnowledgeBase(object):
     def _get_rule(self, rule):
         """INTERNAL USE ONLY
         Get the rule in the KB that is the same as the rule argument
-
         Args:
             rule (Rule): Rule we're searching for
-
         Returns:
             Rule: matching rule
         """
@@ -84,7 +80,6 @@ class KnowledgeBase(object):
 
     def kb_assert(self, fact_rule):
         """Assert a fact or rule into the KB
-
         Args:
             fact_rule (Fact or Rule): Fact or Rule we're asserting
         """
@@ -93,10 +88,8 @@ class KnowledgeBase(object):
 
     def kb_ask(self, fact):
         """Ask if a fact is in the KB
-
         Args:
             fact (Fact) - Statement to be asked (will be converted into a Fact)
-
         Returns:
             listof Bindings|False - list of Bindings if result found, False otherwise
         """
@@ -116,29 +109,80 @@ class KnowledgeBase(object):
             print("Invalid ask:", fact.statement)
             return []
 
-    def kb_retract(self, fact):
+    def kb_retract(self, fact_or_rule):
         """Retract a fact from the KB
-
         Args:
             fact (Fact) - Fact to be retracted
-
         Returns:
             None
         """
-        printv("Retracting {!r}", 0, verbose, [fact])
+        printv("Retracting {!r}", 0, verbose, [fact_or_rule])
         ####################################################
         # Student code goes here
-        
+        if isinstance(fact_or_rule, Fact):
+            if fact_or_rule in self.facts:
+                index = self.facts.index(fact_or_rule)
+                fact_or_rule = self.facts[index]
+                if fact_or_rule.supported_by:
+                    fact_or_rule.asserted = False
+                else:
+                    self.retract_help(fact_or_rule)
+            
+    def retract_help(self, fact_or_rule):
+        if isinstance(fact_or_rule, Fact) and fact_or_rule in self.facts:
+            index = self.facts.index(fact_or_rule)
+            fact_or_rule = self.facts[index]
+            if fact_or_rule.supported_by:
+                pass
+            else:
+                for i in range(len(fact_or_rule.supports_rules))[::-1]:
+                    index = self.rules.index(fact_or_rule.supports_rules[i])
+                    for j in range(len(self.rules[index].supported_by))[::-1]:
+                        for x in range(len(self.rules[index].supported_by[j])):
+                            if self.rules[index].supported_by[j][x] == fact_or_rule:
+                                del self.rules[index].supported_by[j]
+                                break
+                    self.retract_help(fact_or_rule.supports_rules[i])
+                for i in range(len(fact_or_rule.supports_facts))[::-1]:
+                    index = self.facts.index(fact_or_rule.supports_facts[i])
+                    for j in range(len(self.facts[index].supported_by))[::-1]:
+                        for x in range(len(self.facts[index].supported_by[j])):
+                            if self.facts[index].supported_by[j][x] == fact_or_rule:
+                                del self.facts[index].supported_by[j]
+                                break
+                    self.retract_help(fact_or_rule.supports_facts[i])
+                self.facts.remove(fact_or_rule)
+        elif isinstance(fact_or_rule, Rule) and fact_or_rule in self.rules:
+            index = self.rules.index(fact_or_rule)
+            fact_or_rule = self.rules[index]
+            if fact_or_rule.supported_by:
+                pass
+            else:
+                for i in range(len(fact_or_rule.supports_rules))[::-1]:
+                    index = self.rules.index(fact_or_rule.supports_rules[i])
+                    for j in range(len(self.rules[index].supported_by))[::-1]:
+                        for x in range(len(self.rules[index].supported_by[j])):
+                            if self.rules[index].supported_by[j][x] == fact_or_rule:
+                                del self.rules[index].supported_by[j]
+                                break
+                    self.retract_help(fact_or_rule.supports_rules[i])
+                for i in range(len(fact_or_rule.supports_facts))[::-1]:
+                    index = self.facts.index(fact_or_rule.supports_facts[i])
+                    for j in range(len(self.facts[index].supported_by))[::-1]:
+                        for x in range(len(self.facts[index].supported_by[j])):
+                            if self.facts[index].supported_by[j][x] == fact_or_rule:
+                                del self.facts[index].supported_by[j]
+                                break
+                    self.retract_help(fact_or_rule.supports_facts[i])
+                self.rules.remove(fact_or_rule)
 
 class InferenceEngine(object):
     def fc_infer(self, fact, rule, kb):
         """Forward-chaining to infer new facts and rules
-
         Args:
             fact (Fact) - A fact from the KnowledgeBase
             rule (Rule) - A rule from the KnowledgeBase
             kb (KnowledgeBase) - A KnowledgeBase
-
         Returns:
             Nothing            
         """
@@ -146,3 +190,24 @@ class InferenceEngine(object):
             [fact.statement, rule.lhs, rule.rhs])
         ####################################################
         # Student code goes here
+        bindings = match(rule.lhs[0], fact.statement)
+
+        if bindings:
+            if len(rule.lhs) > 1:
+                new_rule = Rule([rule.lhs, rule.rhs], [[rule,fact]])
+                new_rule.lhs.remove(new_rule.lhs[0])
+                for i in range(len(new_rule.lhs)):
+                    new_rule.lhs[i] = instantiate(new_rule.lhs[i], bindings)
+                new_rule.rhs = instantiate(new_rule.rhs, bindings)
+                index = kb.facts.index(fact)
+                kb.facts[index].supports_rules.append(new_rule)
+                index = kb.rules.index(rule)
+                kb.rules[index].supports_rules.append(new_rule)
+                kb.kb_assert(new_rule)
+            else:
+                new_fact = Fact(instantiate(rule.rhs, bindings),[[rule,fact]])
+                index = kb.facts.index(fact)
+                kb.facts[index].supports_facts.append(new_fact)
+                index = kb.rules.index(rule)
+                kb.rules[index].supports_facts.append(new_fact)
+                kb.kb_assert(new_fact)
